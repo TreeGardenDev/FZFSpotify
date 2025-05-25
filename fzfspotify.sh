@@ -33,7 +33,7 @@ if [ "$real_output" == "play_artist" ]; then
 fi
 
 
-python fzfspotify.py $final_query
+python ~/git/fzfspot/fzfspotify.py $final_query
 
 
 
