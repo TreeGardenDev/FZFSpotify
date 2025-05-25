@@ -6,6 +6,7 @@ import time
 import requests
 import subprocess
 spotplayercmd="/home/baum/.cargo/bin/spotify_player"
+fzfcmd=["fzf, --layout=reverse-list, --border=rounded, --border-label='Fuzzy Spotify'"]
 
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
@@ -13,16 +14,32 @@ SPOTIFY_API_BASE = "https://api.spotify.com/v1"
 def open_initial_menu():
     #open fzf menu
     options=[
+        "Play",
+        "Pause",
+        "Shuffle",
+        "Skip",
+        "Previous",
     "Full Playlist",
     "Context Playlist",
     "Play Artist",
-    "Single Song"
+    "Single Song",
+        "Quit"
     ]
-    result = subprocess.run(["fzf"], input="\n".join(options), text=True, capture_output=True)
+    result = subprocess.run(["fzf", "--layout=reverse-list", "--border=rounded", "--border-label='Fuzzy Spotify'"], input=" \n".join(options), text=True, capture_output=True)
 
     if result.returncode != 0:
         return None
     selected = result.stdout.strip()
+    if selected == "Play":
+        return "play"
+    if selected == "Pause": 
+        return "pause"
+    if selected == "Shuffle":
+        return "shuffle"
+    if selected == "Skip":
+        return "next"
+    if selected =="Previous":
+        return "previous"
     if selected=="Full Playlist":
         return "play_playlist"
     if selected=="Context Playlist":
@@ -32,6 +49,8 @@ def open_initial_menu():
         return "play_artist"
     if selected=="Single Song":
         return "single_song_playlist"
+    if selected=="Quit":
+        sys.exit(0)
 #return selected
 
 def get_env_var(var):
@@ -99,7 +118,7 @@ def fzf_select_artist(options):
 
 def fzf_select_song(options):
     input_str = "\n".join([f"{name} - {artist}" for name, artist,uri in options])
-    result = subprocess.run(["fzf"], input=input_str, text=True, capture_output=True)
+    result = subprocess.run(["fzf", "--layout=reverse-list", "--border=rounded", "--border-label='Fuzzy Spotify'"], input=input_str, text=True, capture_output=True)
     if result.returncode != 0:
         return None
     selected = result.stdout.strip()
@@ -108,7 +127,7 @@ def fzf_select_song(options):
             return uri
 def fzf_select_song_name(options):
     input_str = "\n".join([f"{name} - {artist}" for name, artist,uri in options])
-    result = subprocess.run(["fzf"], input=input_str, text=True, capture_output=True)
+    result = subprocess.run(["fzf", "--layout=reverse-list", "--border=rounded", "--border-label='Fuzzy Spotify'"], input=input_str, text=True, capture_output=True)
     if result.returncode != 0:
         return None
     selected = result.stdout.strip()
@@ -120,7 +139,7 @@ def fzf_select_song_name(options):
     return None
 def fzf_select_playlist(options):
     input_str = "\n".join([f"{name}" for name, id in options])
-    result = subprocess.run(["fzf"], input=input_str, text=True, capture_output=True)
+    result = subprocess.run(["fzf", "--layout=reverse-list", "--border=rounded", "--border-label='Fuzzy Spotify'"], input=input_str, text=True, capture_output=True)
     if result.returncode != 0:
         return None
     selected = result.stdout.strip()
@@ -196,6 +215,9 @@ def play_song(token,playlist_id):
     uri = fzf_select_song(options)
     if uri:
         play_track(uri)
+def play_pause(method):
+    exec_command = spotplayercmd+" playback "+str(method)
+    _= subprocess.run(exec_command, shell=True, text=True, capture_output=True)
 
 
 def main():
@@ -235,6 +257,17 @@ def main():
         options = [(playlist["name"], playlist["id"]) for playlist in playlists["items"]]
         id=fzf_select_playlist(options)
         play_playlist_radio(id, token)
+    elif command == "play":
+        _= play_pause("play")
+
+    elif command == "pause":
+        _= play_pause("pause")
+    elif command == "shuffle":
+        _= play_pause("shuffle")
+    elif command == "next":
+        _= play_pause("next")
+    elif command == "previous":
+        _= play_pause("previous")
     elif command == "search":
         query = " ".join(sys.argv[2:])
         tracks = search_tracks(query, token)
