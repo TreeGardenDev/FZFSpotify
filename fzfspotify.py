@@ -50,7 +50,26 @@ def query_playlists(token, playlist_id):
     #print(resp.json())
     
     return resp.json()
-    
+def get_artist_search(token, artist_id):
+    headers = {"Authorization": f"Bearer {token}"}
+    #encode artist_id for url
+
+    artist_id = artist_id.replace(" ", "+")
+    #print(f"playlist_id:"+str(playlist_id))
+    resp = requests.get(f"{SPOTIFY_API_BASE}/search?q="+artist_id+"&type=artist", headers=headers)
+
+    return resp.json()
+def fzf_select_artist(options):
+    input_str = "\n".join([f"{artist} - {uri}" for  artist,uri in options])
+    result = subprocess.run(["fzf"], input=input_str, text=True, capture_output=True)
+    if result.returncode != 0:
+        return None
+    selected = result.stdout.strip()
+    #print(selected)
+    for artist, uri in options:
+        if f"{artist} - {uri}" == selected:
+            #print(f"Selected: {uri}")
+            return uri
 
 
 def fzf_select_song(options):
@@ -97,21 +116,30 @@ def fzf_select_playlist(options):
 
     return None
 
-def play_track(uri, token):
+def play_track(uri):
     #use spotifY_player to play the track
     exec_command = f"spotify_player playback start track --id \"{uri}\""
     
-    result = subprocess.run(exec_command, shell=True, text=True, capture_output=True)
+    _= subprocess.run(exec_command, shell=True, text=True, capture_output=True)
     #print(str(result))
     
     #print(response)
     return 0
-def play_context(uri, token):
+def play_context(uri):
     #use spotifY_player to play the track
     exec_command = f"spotify_player playback start context --name \"{uri}\" playlist"
     
-    result = subprocess.run(exec_command, shell=True, text=True, capture_output=True)
-    print(str(result))
+    _= subprocess.run(exec_command, shell=True, text=True, capture_output=True)
+
+    #print(str(result))
+    
+    #print(response)
+    return 0
+def play_radio_playlist(uri):
+    #use spotifY_player to play the track
+    exec_command = f"spotify_player playback start radio --name \"{uri}\" playlist"
+    
+    _= subprocess.run(exec_command, shell=True, text=True, capture_output=True)
 
     #print(str(result))
     
@@ -130,9 +158,34 @@ def play_playlist(playlist_id, token):
     uri = fzf_select_song_name(options)
     #print(uri)
     if uri:
-        play_context(uri, token)
+        play_context(uri)
         return 0
     
+def play_playlist_radio(playlist_id, token):
+    #tracks = query_playlists(token, playlist_id)
+    #print(str(tracks))
+    exec_command = f"spotify_player playback start radio --id \"{playlist_id}\" playlist"
+    
+    _= subprocess.run(exec_command, shell=True, text=True, capture_output=True)
+
+    #print(str(result))
+    
+    #print(response)
+    return 0
+
+    
+def play_artist(token,id):
+    exec_command = f"spotify_player playback start radio --id \"{id}\" artist"
+    print(exec_command)
+    
+    _= subprocess.run(exec_command, shell=True, text=True, capture_output=True)
+    #print(str(result))
+    
+    #print(response)
+    return 0
+
+
+
 
 def play_song(token,playlist_id):
     tracks = query_playlists(token, playlist_id)
@@ -144,20 +197,7 @@ def play_song(token,playlist_id):
     uri = fzf_select_song(options)
     #print(uri)
     if uri:
-        play_track(uri, token)
-def get_all_id_in_playlist(token,playlist_id):
-    tracks = query_playlists(token, playlist_id)
-    
-    idarray= []
-    #options = [(t["track"]["name"], t["track"]["artists"][0]["name"], t["track"]["id"]) for t in tracks["items"]]
-    #get just [track name]
-    #Get ID from song 
-    #for t in tracks["items"]:
-    #    idarray.append(t["track"]["id"])
-    #    print(t["track"]["id"])
-
-    #print(uri)
-    play_playlist(playlist_id, token)
+        play_track(uri)
 
 
 def main():
@@ -166,32 +206,45 @@ def main():
         sys.exit(1)
     command = sys.argv[1]
     token = get_spotify_auth()
-    if command=="myplaylists":
+    if command=="context_playlist":
         playlists = get_my_playlists(token)
         options = [(playlist["name"], playlist["id"]) for playlist in playlists["items"]]
-        
 
         id=fzf_select_playlist(options)
         
         playlist=play_playlist(id, token)
         
-        #if id:
-        #    play_song(token,id)
-
         return playlist
 
-    elif command == "playlist":
-        if len(sys.argv) < 3:
-            print("Usage: spotify_cli.py playlist <playlist_id>")
-            sys.exit(1)
-        playlist_id = sys.argv[2]
-        play_song(token,playlist_id)
+    elif command == "single_song_playlist":
+        playlists = get_my_playlists(token)
+        options = [(playlist["name"], playlist["id"]) for playlist in playlists["items"]]
+        id=fzf_select_playlist(options)
+        play_song(token,id)
+
+    elif command == "play_artist":
+        artist_name=sys.argv[2]
+        playlists = get_artist_search(token, artist_name)
+        
+
+        options = [(playlist["name"], playlist["id"]) for playlist in playlists["artists"]["items"]]
+
+        id=fzf_select_artist(options)
+        print(f"Selected: {id}")
+
+        #id=fzf_select_playlist(options)
+        play_artist(token,id)
+    elif command == "play_playlist":
+        playlists = get_my_playlists(token)
+        options = [(playlist["name"], playlist["id"]) for playlist in playlists["items"]]
+        id=fzf_select_playlist(options)
+        play_playlist_radio(id, token)
     elif command == "search":
         query = " ".join(sys.argv[2:])
         tracks = search_tracks(query, token)
         uri = fzf_select_song(tracks)
         if uri:
-            play_track(uri, token)
+            play_track(uri)
     else:
         print("Unknown command:", command)
 
