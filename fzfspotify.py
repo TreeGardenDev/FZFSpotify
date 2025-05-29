@@ -52,6 +52,14 @@ def open_initial_menu():
     if selected=="Quit":
         sys.exit(0)
 #return selected
+def ensure_spotifyd_running():
+    #check if spotifyd is running, start it if not
+    try:
+        subprocess.run(["pgrep", "spotifyd"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        print("Starting spotifyd...")
+        subprocess.Popen(["spotifyd"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(2)
 
 def get_env_var(var):
     return os.environ.get(var)
