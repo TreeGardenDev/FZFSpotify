@@ -57,14 +57,15 @@ def ensure_spotifyd_running():
     id=None
     name = "spotifyd"
     #id=subprocess.run(["pidof", "spotifyd"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    id=None
     for proc in psutil.process_iter(['pid', 'name']):
         if proc.info['name'] == name:
             print(f"Found spotifyd with PID: {proc.info['pid']}")
             id = proc.info['pid']
     if id is None:
         print("Starting spotifyd...")
-        subprocess.Popen(["/home/baum/.local/bin/spotifyd"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        #subprocess.Popen(["/home/baum/.local/bin/spotifyd"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        check_cmd = "spotifyd --no-daemon --verbose"
+        subprocess.run(check_cmd, shell=True, capture_output=True)
         time.sleep(2)
         #make id return the pid of spotifyd
         for proc in psutil.process_iter(['pid', 'name']):
@@ -78,11 +79,19 @@ def ensure_spotifyd_running():
 def ensure_spotifyd_dbus(pid):
     dest = f"org.mpris.MediaPlayer2.spotifyd.instance{pid}"
     check_cmd = f"dbus-send --print-reply --dest={dest} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Introspectable.Introspect"
-    result = subprocess.run(check_cmd, shell=True, capture_output=True)
+
+    #print(f"Checking D-Bus service with command: \n{check_cmd}")
+    
+    result = subprocess.run(check_cmd, shell=True, text=True, capture_output=True)
+    print(f"Result of D-Bus introspection: \n{result.stdout}")
     if result.returncode != 0:
+        
         dest = f"rs.spotifyd.instance{pid}"
         activate_cmd = f"dbus-send --print-reply --dest={dest} /rs/spotifyd/Controls rs.spotifyd.Controls.TransferPlayback"
-        subprocess.run(activate_cmd, shell=True)
+        print(f"Activating D-Bus service with command: \n{activate_cmd}")
+        run=subprocess.run(activate_cmd, shell=True,capture_output=True)
+        print(f"Result of D-Bus activation: \n{run.stdout}")
+        
     return dest
 
 
