@@ -27,6 +27,10 @@ def open_initial_menu():
     ]
     result = subprocess.run(["fzf", "--layout=reverse-list", "--border=rounded", "--border-label='Fuzzy Spotify'"], input=" \n".join(options), text=True, capture_output=True)
 
+    #check if fzf is -z
+    if result.returncode == 130:
+        print("Exiting...")
+        sys.exit(0)
     if result.returncode != 0:
         return None
     selected = result.stdout.strip()
