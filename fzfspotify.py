@@ -165,6 +165,9 @@ def get_artist_search(token, artist_id):
 def fzf_select_artist(options):
     input_str = "\n".join([f"{artist} - {uri}" for  artist,uri in options])
     result = subprocess.run(["fzf"], input=input_str, text=True, capture_output=True)
+    if result.returncode == 130:
+        print("Exiting...")
+        sys.exit(0)
     if result.returncode != 0:
         return None
     selected = result.stdout.strip()
@@ -178,6 +181,9 @@ def fzf_select_artist(options):
 def fzf_select_song(options):
     input_str = "\n".join([f"{name} - {artist}" for name, artist,uri in options])
     result = subprocess.run(["fzf", "--layout=reverse-list", "--border=rounded", "--border-label='Fuzzy Spotify'"], input=input_str, text=True, capture_output=True)
+    if result.returncode == 130:
+        print("Exiting...")
+        sys.exit(0)
     if result.returncode != 0:
         return None
     selected = result.stdout.strip()
@@ -187,6 +193,9 @@ def fzf_select_song(options):
 def fzf_select_song_name(options):
     input_str = "\n".join([f"{name} - {artist}" for name, artist,uri in options])
     result = subprocess.run(["fzf", "--layout=reverse-list", "--border=rounded", "--border-label='Fuzzy Spotify'"], input=input_str, text=True, capture_output=True)
+    if result.returncode == 130:
+        print("Exiting...")
+        sys.exit(0)
     if result.returncode != 0:
         return None
     selected = result.stdout.strip()
@@ -199,6 +208,9 @@ def fzf_select_song_name(options):
 def fzf_select_playlist(options):
     input_str = "\n".join([f"{name}" for name, id in options])
     result = subprocess.run(["fzf", "--layout=reverse-list", "--border=rounded", "--border-label='Fuzzy Spotify'"], input=input_str, text=True, capture_output=True)
+    if result.returncode == 130:
+        print("Exiting...")
+        sys.exit(0)
     if result.returncode != 0:
         return None
     selected = result.stdout.strip()
