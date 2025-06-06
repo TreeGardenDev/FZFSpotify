@@ -64,10 +64,10 @@ def ensure_spotifyd_running():
     if id is None:
         print("Starting spotifyd...")
         subprocess.Popen("/home/baum/.local/bin/spotifyd", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        #time.sleep(2)
+        time.sleep(1)
         #make id return the pid of spotifyd
         for proc in psutil.process_iter(['pid', 'name']):
-            #print(proc.info)
+            print(proc.info['name'])
             if proc.info['name'] == name:
                 print(f"Found spotifyd with PID: {proc.info['pid']}")
                 id = proc.info['pid']
