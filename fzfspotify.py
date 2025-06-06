@@ -63,21 +63,22 @@ def ensure_spotifyd_running():
             id = proc.info['pid']
     if id is None:
         print("Starting spotifyd...")
-        #subprocess.Popen(["/home/baum/.local/bin/spotifyd"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        check_cmd = "spotifyd --no-daemon --verbose"
-        subprocess.run(check_cmd, shell=True, capture_output=True)
-        time.sleep(2)
+        subprocess.Popen("/home/baum/.local/bin/spotifyd", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(1)
         #make id return the pid of spotifyd
         for proc in psutil.process_iter(['pid', 'name']):
-            print(proc.info)
+            print(proc.info['name'])
             if proc.info['name'] == name:
                 print(f"Found spotifyd with PID: {proc.info['pid']}")
-                return proc.info['pid']
+                id = proc.info['pid']
     return id
 
 
-def ensure_spotifyd_dbus(pid):
-    dest = f"org.mpris.MediaPlayer2.spotifyd.instance{pid}"
+def ensure_spotifyd_dbus():
+    spotify_id=ensure_spotifyd_running()
+    print("Spotifyd PID: ", spotify_id)
+
+    dest = f"org.mpris.MediaPlayer2.spotifyd.instance{spotify_id}"
     check_cmd = f"dbus-send --print-reply --dest={dest} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Introspectable.Introspect"
 
     #print(f"Checking D-Bus service with command: \n{check_cmd}")
@@ -86,13 +87,13 @@ def ensure_spotifyd_dbus(pid):
     print(f"Result of D-Bus introspection: \n{result.stdout}")
     if result.returncode != 0:
         
-        dest = f"rs.spotifyd.instance{pid}"
+        dest = f"rs.spotifyd.instance{spotify_id}"
         activate_cmd = f"dbus-send --print-reply --dest={dest} /rs/spotifyd/Controls rs.spotifyd.Controls.TransferPlayback"
         print(f"Activating D-Bus service with command: \n{activate_cmd}")
         run=subprocess.run(activate_cmd, shell=True,capture_output=True)
         print(f"Result of D-Bus activation: \n{run.stdout}")
         
-    return dest
+    return spotify_id
 
 
 def build_dbus_string(pid):
@@ -214,9 +215,9 @@ def play_playlist(playlist_id, token):
     if uri:
         #strip out {}
         uri = str(uri).replace("{","").replace("}","").replace("'","")
-        id=ensure_spotifyd_running()
+        #id=ensure_spotifyd_running()
         #print(str(id))
-        ensure_spotifyd_dbus(id)
+        id=ensure_spotifyd_dbus()
         dest=build_dbus_string(id)
         play_uri(uri, dest)
         return 0
@@ -232,16 +233,16 @@ def play_song(token,playlist_id):
     uri = fzf_select_song(options)
     if uri:
 
-        id=ensure_spotifyd_running()
+        #id=ensure_spotifyd_running()
         #print(str(id))
-        ensure_spotifyd_dbus(id)
+        id=ensure_spotifyd_dbus()
         dest=build_dbus_string(id)
         play_uri(uri, dest)
 
 def play_pause(method):
-    id=ensure_spotifyd_running()
+    #id=ensure_spotifyd_running()
     #print(str(id))
-    ensure_spotifyd_dbus(id)
+    id=ensure_spotifyd_dbus()
 
     exec_command = f"dbus-send --print-reply --dest=org.mpris.MediaPlayer2.spotifyd.instance{str(id)} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.{method}"
     _= subprocess.run(exec_command, shell=True, text=True, capture_output=True)
@@ -276,9 +277,9 @@ def main():
         options = [(playlist["name"], playlist["uri"]) for playlist in playlists["artists"]["items"]]
 
         uri=fzf_select_artist(options)
-        pid=ensure_spotifyd_running()
+        #pid=ensure_spotifyd_running()
         #print(str(pid))
-        ensure_spotifyd_dbus(pid)
+        pid=ensure_spotifyd_dbus()
         dest=build_dbus_string(pid)
         play_uri(uri, dest)
 
@@ -289,10 +290,10 @@ def main():
         options = [(playlist["name"], playlist["uri"]) for playlist in playlists["items"]]
         uri=fzf_select_playlist(options)
 
-        id=ensure_spotifyd_running()
+        #id=ensure_spotifyd_running()
 
         #print(str(id))
-        ensure_spotifyd_dbus(id)
+        id=ensure_spotifyd_dbus()
         dest=build_dbus_string(id)
         play_uri(uri, dest)
 
@@ -312,9 +313,9 @@ def main():
         tracks = search_tracks(query, token)
         uri = fzf_select_song(tracks)
         if uri:
-            id =ensure_spotifyd_running()
+            #id =ensure_spotifyd_running()
             #print(str(id))
-            ensure_spotifyd_dbus(id)
+            id=ensure_spotifyd_dbus()
             dest=build_dbus_string(id)
             play_uri(uri, dest)
     else:
