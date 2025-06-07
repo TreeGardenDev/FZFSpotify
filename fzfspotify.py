@@ -10,6 +10,7 @@ fzfcmd=["fzf, --layout=reverse-list, --border=rounded, --border-label='Fuzzy Spo
 
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
+LAST_FM_API_BASE = "https://ws.audioscrobbler.com/2.0/"
 
 def open_initial_menu():
     #open fzf menu
@@ -60,7 +61,6 @@ def ensure_spotifyd_running():
     #check if spotifyd is running, start it if not
     id=None
     name = "spotifyd"
-    #id=subprocess.run(["pidof", "spotifyd"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for proc in psutil.process_iter(['pid', 'name']):
         if proc.info['name'] == name:
             print(f"Found spotifyd with PID: {proc.info['pid']}")
@@ -77,7 +77,6 @@ def ensure_spotifyd_running():
                 id = proc.info['pid']
     return id
 def full_restart_spotifyd():
-    #kill spotifyd if running
     id=ensure_spotifyd_running()
     if id is not None:
         print(f"Killing spotifyd with PID: {id}")
@@ -91,14 +90,8 @@ def full_restart_spotifyd():
     dest = f"rs.spotifyd.instance{new_id}"
     activate_cmd = f"dbus-send --print-reply --dest={dest} /rs/spotifyd/Controls rs.spotifyd.Controls.TransferPlayback"
 
-    run=subprocess.run(activate_cmd, shell=True,capture_output=True)
+    _=subprocess.run(activate_cmd, shell=True,capture_output=True)
     return new_id
-
-
-
-   
-    #activate it on dbus
-
 
 
 def ensure_spotifyd_dbus():
