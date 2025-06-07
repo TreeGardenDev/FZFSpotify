@@ -10,6 +10,7 @@ fzfcmd=["fzf, --layout=reverse-list, --border=rounded, --border-label='Fuzzy Spo
 
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
+LAST_FM_API_BASE = "https://ws.audioscrobbler.com/2.0/"
 
 def open_initial_menu():
     #open fzf menu
@@ -60,7 +61,6 @@ def ensure_spotifyd_running():
     #check if spotifyd is running, start it if not
     id=None
     name = "spotifyd"
-    #id=subprocess.run(["pidof", "spotifyd"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for proc in psutil.process_iter(['pid', 'name']):
         if proc.info['name'] == name:
             print(f"Found spotifyd with PID: {proc.info['pid']}")
@@ -76,6 +76,22 @@ def ensure_spotifyd_running():
                 print(f"Found spotifyd with PID: {proc.info['pid']}")
                 id = proc.info['pid']
     return id
+def full_restart_spotifyd():
+    id=ensure_spotifyd_running()
+    if id is not None:
+        print(f"Killing spotifyd with PID: {id}")
+        os.kill(id, 9)
+        time.sleep(1)
+    #start spotifyd again
+    subprocess.Popen("/home/baum/.local/bin/spotifyd", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(1)
+    new_id=ensure_spotifyd_running()
+    
+    dest = f"rs.spotifyd.instance{new_id}"
+    activate_cmd = f"dbus-send --print-reply --dest={dest} /rs/spotifyd/Controls rs.spotifyd.Controls.TransferPlayback"
+
+    _=subprocess.run(activate_cmd, shell=True,capture_output=True)
+    return new_id
 
 
 def ensure_spotifyd_dbus():
@@ -108,7 +124,17 @@ def play_uri(uri,dest):
     
     exec=f"dbus-send --print-reply --dest="+dest+" /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri string:"+str(uri)
     print(exec)
-    _= subprocess.run(exec, shell=True, text=True, capture_output=True)
+    run= subprocess.run(exec, shell=True, text=True, capture_output=True)
+    print(run.returncode)
+    if run.returncode != 0: 
+        #Restart spotifyd
+        print("Restarting spotifyd...")
+        newid=full_restart_spotifyd()
+        dest= build_dbus_string(newid)
+        _=play_uri(uri, dest)
+        #try again
+
+
 
     return 0
 
