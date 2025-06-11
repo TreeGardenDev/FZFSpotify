@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 
 import os
+from typing_extensions import override
 import psutil
 import sys
 import time
 import requests
 import subprocess
 import base64
-import json
+
+from dotenv import load_dotenv
+load_dotenv()
+oauth_token = os.getenv("SPOTIFY_OAUTH_TOKEN")
+refresh_token = os.getenv("SPOTIFY_REFRESH_TOKEN")
+
 fzfcmd=["fzf, --layout=reverse-list, --border=rounded, --border-label='Fuzzy Spotify'"]
 
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -30,7 +36,6 @@ def open_initial_menu():
     ]
     result = subprocess.run(["fzf", "--layout=reverse-list", "--border=rounded", "--border-label='Fuzzy Spotify'"], input=" \n".join(options), text=True, capture_output=True)
 
-    #check if fzf is -z
     if result.returncode == 130:
         print("Exiting...")
         sys.exit(0)
@@ -52,13 +57,11 @@ def open_initial_menu():
     if selected=="Similar Tracks":
         return "similar_tracks"
     if selected=="Play Artist":
-        #get artist name from user
         return "play_artist"
     if selected=="Single Song":
         return "single_song_playlist"
     if selected=="Quit":
         sys.exit(0)
-#return selected
 def get_env_var(var):
     return os.environ.get(var)
 
@@ -66,19 +69,17 @@ def get_env_var(var):
     #     -H "Content-Type: application/x-www-form-urlencoded" \
     #     -d "grant_type=client_credentials&client_id={ID}&client_secret={SECRET}"
 
-def update_env_variable(key, value, env_path=".zshenv"):
+def update_env_variable(key, value, env_path=".env"):
     lines = []
     found = False
-    try:
+    if os.path.exists(env_path):
         with open(env_path, "r") as f:
             for line in f:
-                if line.startswith(f"{key}="):
+                if line.strip().startswith(f"{key}="):
                     lines.append(f"{key}={value}\n")
                     found = True
                 else:
                     lines.append(line)
-    except FileNotFoundError:
-        pass
     if not found:
         lines.append(f"{key}={value}\n")
     with open(env_path, "w") as f:
@@ -115,24 +116,27 @@ def get_me_path_authcode():
 
 def get_refresh_token():
   
-    access_token = get_env_var("SPOTIFY_OAUTH_TOKEN")
     refresh_token = get_env_var("SPOTIFY_REFRESH_TOKEN")
     url = "https://accounts.spotify.com/api/token"
     payload = {
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
-        "client_id": get_env_var("SPOTIFY_CLIENT_ID")
+        "client_id": get_env_var("SPOTIFY_CLIENT_ID"),
     }
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    authbase64 = base64.b64encode(f"{get_env_var('SPOTIFY_CLIENT_ID')}:{get_env_var('SPOTIFY_SECRET_ID')}".encode('utf-8'))
+    headers = {"Content-Type": "application/x-www-form-urlencoded", "Authorization": "Basic " + authbase64.decode('utf-8')}
     response = requests.post(url, headers=headers, data=payload)
     if response.status_code == 200:
+        print(response.json())
         data = response.json()
         new_access_token = data.get("access_token")
+        new_refresh_token = data.get("refresh_token")
+        if not new_refresh_token:
+            new_refresh_token = refresh_token
         if new_access_token:
             update_env_variable("SPOTIFY_OAUTH_TOKEN", new_access_token)
-            update_env_variable("SPOTIFY_REFRESH_TOKEN", data.get("refresh_token"))
-            print("No access token found in response.")
-   
+            update_env_variable("SPOTIFY_REFRESH_TOKEN", new_refresh_token)
+            load_dotenv(override=True)  # Reload the environment variables
 
 
 def create_similiar_lastfm_command(artist, track):
@@ -144,7 +148,7 @@ def create_similiar_lastfm_command(artist, track):
         sys.exit(1)
     return f"{LAST_FM_API_BASE}?method=track.getSimilar&artist={artist}&track={track}&api_key={api_key}&format=json"
 
-def add_to_queue(options, token,authtoken,refreshtoken):
+def add_to_queue(options, token):
     track_uris = []
     for name, artist, uri in options:
         #create spotify query
@@ -155,9 +159,7 @@ def add_to_queue(options, token,authtoken,refreshtoken):
             track_uris.append(track[0])
     print(f"Adding {len(track_uris)} tracks to playback queue.")
     for uri in track_uris:
-        add_to_playback_queue(uri, token,authtoken,refreshtoken)
-
-        
+        add_to_playback_queue(uri, token)
 
 
 def search_spotify(query, token):
@@ -166,33 +168,29 @@ def search_spotify(query, token):
     resp = requests.get(f"{SPOTIFY_API_BASE}/search", headers=headers, params=params)
     resp.raise_for_status()
     tracks = resp.json()["tracks"]["items"]
-    return [(t["uri"]) for t in tracks]
+    if tracks:
+        return [(t["uri"]) for t in tracks]
 
-def add_to_playback_queue(uri, token,authtoken,refreshtoken):
+def add_to_playback_queue(uri, token):
+    load_dotenv(override=True)  # Reload the environment variables
+    authtoken = os.getenv("SPOTIFY_OAUTH_TOKEN")
+
     #Add a track to the spotify playback queue
     headers = {"Authorization": f"Bearer {authtoken}"}
-    data = {"uri": uri}
     resp = requests.post(f"{SPOTIFY_API_BASE}/me/player/queue?uri="+str(uri), headers=headers)
     if resp.status_code == 204:
         print(f"Track {uri} added to playback queue.")
-    #if response is expired token
     elif resp.status_code == 401:
         print(resp.text)
         print("Token expired, refreshing token...")
-        new_token = get_refresh_token()
-        if new_token:
-            print("Token refreshed successfully.")
-            add_to_playback_queue(uri, new_token,authtoken,refreshtoken)
-        else:
-            print("Failed to refresh token.")
+        _=get_refresh_token()
+        print("Token refreshed successfully.")
+
+        add_to_playback_queue(uri, token)
     else:
         print(f"Failed to add track {uri} to playback queue. Status code: {resp.status_code}")
         print(resp.text)
-        #if resp.status_code == 401:
-        #    print("Token expired, refreshing token...")
-        #    token = get_spotify_auth()
-        #    add_to_playback_queue(uri, token)
-
+       
 
 def ensure_spotifyd_running():
     #check if spotifyd is running, start it if not
@@ -429,21 +427,21 @@ def main():
     if command=="similar_tracks":
         artist_name = input("Enter artist name: ")
         track_name = input("Enter track name: ")
-        #id=ensure_spotifyd_dbus()
-        #dest=build_dbus_string(id)
-        #play_uri(f"spotify:track:{track_name}", dest)
 
         lastfm_command = create_similiar_lastfm_command(artist_name, track_name)
         response = requests.get(lastfm_command)
         similar_tracks = response.json()["similartracks"]["track"]
         options = [(track["name"], track["artist"]["name"], track["url"]) for track in similar_tracks]
-        authtoken = get_env_var("SPOTIFY_OAUTH_TOKEN")
-        refreshtoken = get_env_var("SPOTIFY_REFRESH_TOKEN")
         print("Building playback queue...")
-        _=add_to_queue(options, token,authtoken,refreshtoken)
+        query = f"track:{track_name} artist:{artist_name}"
+        track = search_spotify(query, token)
+        if track:
+            _=play_uri(track[0], build_dbus_string(ensure_spotifyd_dbus()))
+        else:
+            print("No track found for query:", query)
+
+        _=add_to_queue(options, token)
         
-        
-      #  return playlist
 
     elif command == "single_song_playlist":
         playlists = get_my_playlists(token)
@@ -502,6 +500,8 @@ def main():
             play_uri(uri, dest)
     else:
         print("Unknown command:", command)
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":
