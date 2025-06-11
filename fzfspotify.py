@@ -36,7 +36,6 @@ def open_initial_menu():
     ]
     result = subprocess.run(["fzf", "--layout=reverse-list", "--border=rounded", "--border-label='Fuzzy Spotify'"], input=" \n".join(options), text=True, capture_output=True)
 
-    #check if fzf is -z
     if result.returncode == 130:
         print("Exiting...")
         sys.exit(0)
@@ -58,13 +57,11 @@ def open_initial_menu():
     if selected=="Similar Tracks":
         return "similar_tracks"
     if selected=="Play Artist":
-        #get artist name from user
         return "play_artist"
     if selected=="Single Song":
         return "single_song_playlist"
     if selected=="Quit":
         sys.exit(0)
-#return selected
 def get_env_var(var):
     return os.environ.get(var)
 
@@ -164,8 +161,6 @@ def add_to_queue(options, token):
     for uri in track_uris:
         add_to_playback_queue(uri, token)
 
-        
-
 
 def search_spotify(query, token):
     headers = {"Authorization": f"Bearer {token}"}
@@ -173,7 +168,8 @@ def search_spotify(query, token):
     resp = requests.get(f"{SPOTIFY_API_BASE}/search", headers=headers, params=params)
     resp.raise_for_status()
     tracks = resp.json()["tracks"]["items"]
-    return [(t["uri"]) for t in tracks]
+    if tracks:
+        return [(t["uri"]) for t in tracks]
 
 def add_to_playback_queue(uri, token):
     load_dotenv(override=True)  # Reload the environment variables
@@ -181,11 +177,9 @@ def add_to_playback_queue(uri, token):
 
     #Add a track to the spotify playback queue
     headers = {"Authorization": f"Bearer {authtoken}"}
-    data = {"uri": uri}
     resp = requests.post(f"{SPOTIFY_API_BASE}/me/player/queue?uri="+str(uri), headers=headers)
     if resp.status_code == 204:
         print(f"Track {uri} added to playback queue.")
-    #if response is expired token
     elif resp.status_code == 401:
         print(resp.text)
         print("Token expired, refreshing token...")
@@ -196,11 +190,7 @@ def add_to_playback_queue(uri, token):
     else:
         print(f"Failed to add track {uri} to playback queue. Status code: {resp.status_code}")
         print(resp.text)
-        #if resp.status_code == 401:
-        #    print("Token expired, refreshing token...")
-        #    token = get_spotify_auth()
-        #    add_to_playback_queue(uri, token)
-
+       
 
 def ensure_spotifyd_running():
     #check if spotifyd is running, start it if not
@@ -437,15 +427,19 @@ def main():
     if command=="similar_tracks":
         artist_name = input("Enter artist name: ")
         track_name = input("Enter track name: ")
-        #id=ensure_spotifyd_dbus()
-        #dest=build_dbus_string(id)
-        #play_uri(f"spotify:track:{track_name}", dest)
 
         lastfm_command = create_similiar_lastfm_command(artist_name, track_name)
         response = requests.get(lastfm_command)
         similar_tracks = response.json()["similartracks"]["track"]
         options = [(track["name"], track["artist"]["name"], track["url"]) for track in similar_tracks]
         print("Building playback queue...")
+        query = f"track:{track_name} artist:{artist_name}"
+        track = search_spotify(query, token)
+        if track:
+            _=play_uri(track[0], build_dbus_string(ensure_spotifyd_dbus()))
+        else:
+            print("No track found for query:", query)
+
         _=add_to_queue(options, token)
         
 
@@ -506,6 +500,8 @@ def main():
             play_uri(uri, dest)
     else:
         print("Unknown command:", command)
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":
