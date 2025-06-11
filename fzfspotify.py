@@ -66,7 +66,7 @@ def get_env_var(var):
     #     -H "Content-Type: application/x-www-form-urlencoded" \
     #     -d "grant_type=client_credentials&client_id={ID}&client_secret={SECRET}"
 
-def update_env_variable(key, value, env_path=".zshenv"):
+def update_env_variable(key, value, env_path=str(get_env_var("HOME"))+"/.zshenv"):
     lines = []
     found = False
     try:
@@ -128,9 +128,13 @@ def get_refresh_token():
     if response.status_code == 200:
         data = response.json()
         new_access_token = data.get("access_token")
+        if not data.get("refresh_token"):
+            new_refresh_token = refresh_token
+        else:
+            new_refresh_token = data.get("refresh_token")
         if new_access_token:
             update_env_variable("SPOTIFY_OAUTH_TOKEN", new_access_token)
-            update_env_variable("SPOTIFY_REFRESH_TOKEN", data.get("refresh_token"))
+            update_env_variable("SPOTIFY_REFRESH_TOKEN", new_refresh_token)
             print("No access token found in response.")
    
 
@@ -179,12 +183,12 @@ def add_to_playback_queue(uri, token,authtoken,refreshtoken):
     elif resp.status_code == 401:
         print(resp.text)
         print("Token expired, refreshing token...")
-        new_token = get_refresh_token()
-        if new_token:
-            print("Token refreshed successfully.")
-            add_to_playback_queue(uri, new_token,authtoken,refreshtoken)
-        else:
-            print("Failed to refresh token.")
+        _=get_refresh_token()
+        print("Token refreshed successfully.")
+        new_auth= get_env_var("SPOTIFY_OAUTH_TOKEN")
+        refreshtoken = get_env_var("SPOTIFY_REFRESH_TOKEN")
+
+        add_to_playback_queue(uri, token,new_auth,refreshtoken)
     else:
         print(f"Failed to add track {uri} to playback queue. Status code: {resp.status_code}")
         print(resp.text)
