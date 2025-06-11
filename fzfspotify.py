@@ -66,9 +66,10 @@ def get_env_var(var):
     #     -H "Content-Type: application/x-www-form-urlencoded" \
     #     -d "grant_type=client_credentials&client_id={ID}&client_secret={SECRET}"
 
-def update_env_variable(key, value, env_path=".zshenv"):
+def update_env_variable(key, value, env_path="/home/baum/.zshenv"):
     lines = []
     found = False
+    print(f"Updating {key} in {env_path} to {value}")
     try:
         with open(env_path, "r") as f:
             for line in f:
@@ -115,23 +116,26 @@ def get_me_path_authcode():
 
 def get_refresh_token():
   
-    access_token = get_env_var("SPOTIFY_OAUTH_TOKEN")
     refresh_token = get_env_var("SPOTIFY_REFRESH_TOKEN")
     url = "https://accounts.spotify.com/api/token"
     payload = {
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
-        "client_id": get_env_var("SPOTIFY_CLIENT_ID")
+        "client_id": get_env_var("SPOTIFY_CLIENT_ID"),
     }
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    authbase64 = base64.b64encode(f"{get_env_var('SPOTIFY_CLIENT_ID')}:{get_env_var('SPOTIFY_SECRET_ID')}".encode('utf-8'))
+    headers = {"Content-Type": "application/x-www-form-urlencoded", "Authorization": "Basic " + authbase64.decode('utf-8')}
     response = requests.post(url, headers=headers, data=payload)
     if response.status_code == 200:
+        print(response.json())
         data = response.json()
         new_access_token = data.get("access_token")
+        new_refresh_token = data.get("refresh_token")
+        if not new_refresh_token:
+            new_refresh_token = refresh_token
         if new_access_token:
             update_env_variable("SPOTIFY_OAUTH_TOKEN", new_access_token)
-            update_env_variable("SPOTIFY_REFRESH_TOKEN", data.get("refresh_token"))
-            print("No access token found in response.")
+            update_env_variable("SPOTIFY_REFRESH_TOKEN", new_refresh_token)
    
 
 
@@ -139,10 +143,16 @@ def create_similiar_lastfm_command(artist, track):
     #create a last.fm command to get similar tracks
     #https://www.last.fm/api/show/track.getSimilar
     api_key = get_env_var("LASTFM_API")
+    string=""
+    if not artist or not track:
+        print("Artist or track name not provided.")
+        sys.exit(1)
+    else:
+        string="&artist="+artist+"&track="+track+"&api_key="+api_key+"&format=json"
     if not api_key:
         print("LASTFM_API environment variable not set.")
         sys.exit(1)
-    return f"{LAST_FM_API_BASE}?method=track.getSimilar&artist={artist}&track={track}&api_key={api_key}&format=json"
+    return f"{LAST_FM_API_BASE}?method=track.getSimilar"+ string
 
 def add_to_queue(options, token,authtoken,refreshtoken):
     track_uris = []
@@ -170,21 +180,20 @@ def search_spotify(query, token):
 
 def add_to_playback_queue(uri, token,authtoken,refreshtoken):
     #Add a track to the spotify playback queue
+
     headers = {"Authorization": f"Bearer {authtoken}"}
     data = {"uri": uri}
     resp = requests.post(f"{SPOTIFY_API_BASE}/me/player/queue?uri="+str(uri), headers=headers)
     if resp.status_code == 204:
         print(f"Track {uri} added to playback queue.")
-    #if response is expired token
     elif resp.status_code == 401:
         print(resp.text)
         print("Token expired, refreshing token...")
-        new_token = get_refresh_token()
-        if new_token:
-            print("Token refreshed successfully.")
-            add_to_playback_queue(uri, new_token,authtoken,refreshtoken)
-        else:
-            print("Failed to refresh token.")
+        _=get_refresh_token()
+        print("Please re-run the command.")
+        sys.exit(0)
+        
+
     else:
         print(f"Failed to add track {uri} to playback queue. Status code: {resp.status_code}")
         print(resp.text)
@@ -429,7 +438,10 @@ def main():
     if command=="similar_tracks":
         artist_name = input("Enter artist name: ")
         track_name = input("Enter track name: ")
-        #id=ensure_spotifyd_dbus()
+        #encode artist and track name for url
+        artist_name = artist_name.replace(" ", "+")
+        track_name = track_name.replace(" ", "+")
+                #id=ensure_spotifyd_dbus()
         #dest=build_dbus_string(id)
         #play_uri(f"spotify:track:{track_name}", dest)
 
@@ -505,4 +517,8 @@ def main():
 
 
 if __name__ == "__main__":
+    path= os.environ.get("PATH", "")
+    env= os.environ.copy()
+    print("Current PATH:", path)
+    print ("Current environment variables:", env)
     main()
