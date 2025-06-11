@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 
 import os
+from typing_extensions import override
 import psutil
 import sys
 import time
 import requests
 import subprocess
 import base64
-import json
+
+from dotenv import load_dotenv
+load_dotenv()
+oauth_token = os.getenv("SPOTIFY_OAUTH_TOKEN")
+refresh_token = os.getenv("SPOTIFY_REFRESH_TOKEN")
+
 fzfcmd=["fzf, --layout=reverse-list, --border=rounded, --border-label='Fuzzy Spotify'"]
 
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -66,19 +72,17 @@ def get_env_var(var):
     #     -H "Content-Type: application/x-www-form-urlencoded" \
     #     -d "grant_type=client_credentials&client_id={ID}&client_secret={SECRET}"
 
-def update_env_variable(key, value, env_path="/home/baum/.zshenv"):
+def update_env_variable(key, value, env_path=".env"):
     lines = []
     found = False
-    try:
+    if os.path.exists(env_path):
         with open(env_path, "r") as f:
             for line in f:
-                if line.startswith(f"{key}="):
+                if line.strip().startswith(f"{key}="):
                     lines.append(f"{key}={value}\n")
                     found = True
                 else:
                     lines.append(line)
-    except FileNotFoundError:
-        pass
     if not found:
         lines.append(f"{key}={value}\n")
     with open(env_path, "w") as f:
@@ -135,6 +139,7 @@ def get_refresh_token():
         if new_access_token:
             update_env_variable("SPOTIFY_OAUTH_TOKEN", new_access_token)
             update_env_variable("SPOTIFY_REFRESH_TOKEN", new_refresh_token)
+            load_dotenv(override=True)  # Reload the environment variables
 
 
 def create_similiar_lastfm_command(artist, track):
@@ -146,7 +151,7 @@ def create_similiar_lastfm_command(artist, track):
         sys.exit(1)
     return f"{LAST_FM_API_BASE}?method=track.getSimilar&artist={artist}&track={track}&api_key={api_key}&format=json"
 
-def add_to_queue(options, token,authtoken,refreshtoken):
+def add_to_queue(options, token):
     track_uris = []
     for name, artist, uri in options:
         #create spotify query
@@ -157,7 +162,7 @@ def add_to_queue(options, token,authtoken,refreshtoken):
             track_uris.append(track[0])
     print(f"Adding {len(track_uris)} tracks to playback queue.")
     for uri in track_uris:
-        add_to_playback_queue(uri, token,authtoken,refreshtoken)
+        add_to_playback_queue(uri, token)
 
         
 
@@ -170,7 +175,10 @@ def search_spotify(query, token):
     tracks = resp.json()["tracks"]["items"]
     return [(t["uri"]) for t in tracks]
 
-def add_to_playback_queue(uri, token,authtoken,refreshtoken):
+def add_to_playback_queue(uri, token):
+    load_dotenv(override=True)  # Reload the environment variables
+    authtoken = os.getenv("SPOTIFY_OAUTH_TOKEN")
+
     #Add a track to the spotify playback queue
     headers = {"Authorization": f"Bearer {authtoken}"}
     data = {"uri": uri}
@@ -183,10 +191,8 @@ def add_to_playback_queue(uri, token,authtoken,refreshtoken):
         print("Token expired, refreshing token...")
         _=get_refresh_token()
         print("Token refreshed successfully.")
-        new_auth= get_env_var("SPOTIFY_OAUTH_TOKEN")
-        refreshtoken = get_env_var("SPOTIFY_REFRESH_TOKEN")
 
-        add_to_playback_queue(uri, token,new_auth,refreshtoken)
+        add_to_playback_queue(uri, token)
     else:
         print(f"Failed to add track {uri} to playback queue. Status code: {resp.status_code}")
         print(resp.text)
@@ -439,13 +445,9 @@ def main():
         response = requests.get(lastfm_command)
         similar_tracks = response.json()["similartracks"]["track"]
         options = [(track["name"], track["artist"]["name"], track["url"]) for track in similar_tracks]
-        authtoken = get_env_var("SPOTIFY_OAUTH_TOKEN")
-        refreshtoken = get_env_var("SPOTIFY_REFRESH_TOKEN")
         print("Building playback queue...")
-        _=add_to_queue(options, token,authtoken,refreshtoken)
+        _=add_to_queue(options, token)
         
-        
-      #  return playlist
 
     elif command == "single_song_playlist":
         playlists = get_my_playlists(token)

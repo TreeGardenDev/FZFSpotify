@@ -1,3 +1,4 @@
 cred.json
 .return
 commandhist.log
+.env
