@@ -66,7 +66,7 @@ def get_env_var(var):
     #     -H "Content-Type: application/x-www-form-urlencoded" \
     #     -d "grant_type=client_credentials&client_id={ID}&client_secret={SECRET}"
 
-def update_env_variable(key, value, env_path=str(get_env_var("HOME"))+"/.zshenv"):
+def update_env_variable(key, value, env_path="/home/baum/.zshenv"):
     lines = []
     found = False
     try:
