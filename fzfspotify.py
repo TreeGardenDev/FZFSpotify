@@ -115,28 +115,26 @@ def get_me_path_authcode():
 
 def get_refresh_token():
   
-    access_token = get_env_var("SPOTIFY_OAUTH_TOKEN")
     refresh_token = get_env_var("SPOTIFY_REFRESH_TOKEN")
     url = "https://accounts.spotify.com/api/token"
     payload = {
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
-        "client_id": get_env_var("SPOTIFY_CLIENT_ID")
+        "client_id": get_env_var("SPOTIFY_CLIENT_ID"),
     }
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    authbase64 = base64.b64encode(f"{get_env_var('SPOTIFY_CLIENT_ID')}:{get_env_var('SPOTIFY_SECRET_ID')}".encode('utf-8'))
+    headers = {"Content-Type": "application/x-www-form-urlencoded", "Authorization": "Basic " + authbase64.decode('utf-8')}
     response = requests.post(url, headers=headers, data=payload)
     if response.status_code == 200:
+        print(response.json())
         data = response.json()
         new_access_token = data.get("access_token")
-        if not data.get("refresh_token"):
+        new_refresh_token = data.get("refresh_token")
+        if not new_refresh_token:
             new_refresh_token = refresh_token
-        else:
-            new_refresh_token = data.get("refresh_token")
         if new_access_token:
             update_env_variable("SPOTIFY_OAUTH_TOKEN", new_access_token)
             update_env_variable("SPOTIFY_REFRESH_TOKEN", new_refresh_token)
-            print("No access token found in response.")
-   
 
 
 def create_similiar_lastfm_command(artist, track):
