@@ -8,6 +8,7 @@ import time
 import requests
 import subprocess
 import base64
+import urllib.parse
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -30,6 +31,7 @@ def open_initial_menu():
         "Previous",
     "Full Playlist",
     "Similar Tracks",
+        "Get Recommendations",
     "Play Artist",
     "Single Song",
         "Quit"
@@ -56,6 +58,8 @@ def open_initial_menu():
         return "play_playlist"
     if selected=="Similar Tracks":
         return "similar_tracks"
+    if selected=="Get Recommendations":
+        return "get_recommendations"
     if selected=="Play Artist":
         return "play_artist"
     if selected=="Single Song":
@@ -398,6 +402,62 @@ def play_playlist(playlist_id, token):
         dest=build_dbus_string(id)
         play_uri(uri, dest)
         return 0
+def build_rec_query(seed_tuple):
+    #build a query for spotify recommendations
+    #Example: seed_artists=artist1,artist2&seed_genres=genre1,genre2&seed_tracks=track1,track2
+    query_parts = []
+    artiststr=""
+    genrestr=""
+    trackstr=""
+    final_str=""
+    for seed_type, seed_value in seed_tuple:
+        if seed_type=="artist":
+            if artiststr:
+                artiststr += ","
+            artiststr += seed_value
+        if seed_type=="genre":
+            if genrestr:
+                genrestr += ","
+            genrestr += seed_value
+        if seed_type=="track":
+            if trackstr:
+                trackstr += ","
+            trackstr += seed_value
+    if artiststr:
+        final_str += f"seed_artists={artiststr}"
+    if genrestr:
+        if final_str:
+            final_str += "&"
+        final_str += f"seed_genres={genrestr}"
+    if trackstr:
+        if final_str:
+            final_str += "&"
+        final_str += f"seed_tracks={trackstr}"
+    encoded_query = urllib.parse.quote(final_str)
+    return encoded_query
+
+def query_recommendations(token, query):
+    load_dotenv(override=True)  # Reload the environment variables
+    authtoken = os.getenv("SPOTIFY_OAUTH_TOKEN")
+    headers = {"Authorization": f"Bearer {authtoken}"}
+
+    url= f"{SPOTIFY_API_BASE}/search?q={query}&type=track"
+    #url="https://api.spotify.com/v1/recommendations?seed_artists=4NHQUGzhtTLFvgF5SZesLK&seed_genres=classical%2Ccountry&seed_tracks=0c6xIDDpzE81m2q797ordA"
+    resp = requests.get(url, headers=headers)
+    #resp.raise_for_status()
+    if resp.status_code == 401:
+        print(resp.text)
+        print("Token expired, refreshing token...")
+        _=get_refresh_token()
+        load_dotenv(override=True)  # Reload the environment variables
+        authtoken = os.getenv("SPOTIFY_OAUTH_TOKEN")
+        headers = {"Authorization": f"Bearer {authtoken}"}
+        print("Token refreshed successfully.")
+        resp = requests.get(url, headers=headers)
+    return resp.json()
+
+
+
 
 def play_song(token,playlist_id):
     print("playlist_id:"+str(playlist_id))
@@ -457,6 +517,45 @@ def main():
 
         _=add_to_queue(options, token)
         
+    elif command == "get_recommendations":
+        building=True
+
+        seed_options=["artist", "genre", "track"]
+        options_tuple=[]
+        while building:
+            command = input("Enter seed type (artist, genre, track) or 'done' to finish: ").strip().lower()
+            if command == "done":
+                building = False
+            else:
+                if command not in seed_options:
+                    print(f"Invalid seed type. Choose from {seed_options}.")
+                    continue
+                seed_value = input(f"Enter {command} name: ").strip()
+                options_tuple.append((command, seed_value))
+        if not options_tuple:
+            print("No seeds provided. Exiting.")
+            sys.exit(0)
+
+
+        query=build_rec_query(options_tuple)
+
+        recommendations = query_recommendations(token, query)
+
+        if recommendations["tracks"]:
+                
+            id=ensure_spotifyd_dbus()
+            dest=build_dbus_string(id)
+            
+            print("Adding recommendations to playback queue...")
+            for track in recommendations["tracks"]["items"]:
+                name = track["name"]
+                artist = track["artists"][0]["name"]
+                query = f"track:{name} artist:{artist}"
+                track = search_spotify(query, token)
+                if track:
+                    add_to_playback_queue(track[0], token)
+            print("Recommendations added to playback queue.")
+            
 
     elif command == "single_song_playlist":
         playlists = get_my_playlists(token)
