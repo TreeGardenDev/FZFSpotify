@@ -108,8 +108,8 @@ def get_me_path_authcode():
     base64_auth = base64.b64encode(f"{get_env_var('SPOTIFY_CLIENT_ID')}:{get_env_var('SPOTIFY_SECRET_ID')}".encode('utf-8'))
     headers = {"Content-Type": "application/x-www-form-urlencoded","Accept":"application/json","Authorization": "Basic " + base64_auth.decode('utf-8')}
     response = requests.post(url, headers=headers)
-    print("Response from Spotify API:")
-    print(response.json())
+    #print("Response from Spotify API:")
+    #print(response.json())
     return response.json().get("access_token", None)
 
 
@@ -127,7 +127,7 @@ def get_refresh_token():
     headers = {"Content-Type": "application/x-www-form-urlencoded", "Authorization": "Basic " + authbase64.decode('utf-8')}
     response = requests.post(url, headers=headers, data=payload)
     if response.status_code == 200:
-        print(response.json())
+        #print(response.json())
         data = response.json()
         new_access_token = data.get("access_token")
         new_refresh_token = data.get("refresh_token")
@@ -146,7 +146,7 @@ def create_similiar_lastfm_command(artist, track):
     if not api_key:
         print("LASTFM_API environment variable not set.")
         sys.exit(1)
-    return f"{LAST_FM_API_BASE}?method=track.getSimilar&artist={artist}&track={track}&api_key={api_key}&format=json"
+    return f"{LAST_FM_API_BASE}?method=track.getSimilar&autocorrect=1&artist={artist}&track={track}&api_key={api_key}&format=json"
 
 def add_to_queue(options, token):
     track_uris = []
@@ -170,6 +170,9 @@ def search_spotify(query, token):
     tracks = resp.json()["tracks"]["items"]
     if tracks:
         return [(t["uri"]) for t in tracks]
+    else:
+        print(f"No tracks found for query: {query}")
+        return None
 
 def add_to_playback_queue(uri, token):
     load_dotenv(override=True)  # Reload the environment variables
@@ -187,6 +190,9 @@ def add_to_playback_queue(uri, token):
         print("Token refreshed successfully.")
 
         add_to_playback_queue(uri, token)
+    elif resp.status_code==404:
+        print(f"Playback device not found. Please ensure a Spotify client is active and try again.")
+        sys.exit(1)
     else:
         print(f"Failed to add track {uri} to playback queue. Status code: {resp.status_code}")
         print(resp.text)
@@ -206,7 +212,7 @@ def ensure_spotifyd_running():
         time.sleep(1)
         #make id return the pid of spotifyd
         for proc in psutil.process_iter(['pid', 'name']):
-            print(proc.info['name'])
+            #print(proc.info['name'])
             if proc.info['name'] == name:
                 print(f"Found spotifyd with PID: {proc.info['pid']}")
                 id = proc.info['pid']
@@ -239,12 +245,12 @@ def ensure_spotifyd_dbus():
     #print(f"Checking D-Bus service with command: \n{check_cmd}")
     
     result = subprocess.run(check_cmd, shell=True, text=True, capture_output=True)
-    print(f"Result of D-Bus introspection: \n{result.stdout}")
+    #print(f"Result of D-Bus introspection: \n{result.stdout}")
     if result.returncode != 0:
         
         dest = f"rs.spotifyd.instance{spotify_id}"
         activate_cmd = f"dbus-send --print-reply --dest={dest} /rs/spotifyd/Controls rs.spotifyd.Controls.TransferPlayback"
-        print(f"Activating D-Bus service with command: \n{activate_cmd}")
+        #print(f"Activating D-Bus service with command: \n{activate_cmd}")
         run=subprocess.run(activate_cmd, shell=True,capture_output=True)
         print(f"Result of D-Bus activation: \n{run.stdout}")
         
@@ -258,9 +264,9 @@ def build_dbus_string(pid):
 def play_uri(uri,dest):
     
     exec=f"dbus-send --print-reply --dest="+dest+" /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri string:"+str(uri)
-    print(exec)
+    #print(exec)
     run= subprocess.run(exec, shell=True, text=True, capture_output=True)
-    print(run.returncode)
+    #print(run.returncode)
     if run.returncode != 0: 
         #Restart spotifyd
         print("Restarting spotifyd...")
@@ -430,6 +436,15 @@ def main():
 
         lastfm_command = create_similiar_lastfm_command(artist_name, track_name)
         response = requests.get(lastfm_command)
+        if response.status_code != 200:
+            print("Failed to fetch similar tracks from Last.fm")
+            sys.exit(1)
+        if not response.json().get("similartracks"):
+            print("No similar tracks found for the given artist and track.")
+            print ("Artist:", artist_name)
+            print ("Track:", track_name)
+            print(response.json())
+            sys.exit(0)
         similar_tracks = response.json()["similartracks"]["track"]
         options = [(track["name"], track["artist"]["name"], track["url"]) for track in similar_tracks]
         print("Building playback queue...")
