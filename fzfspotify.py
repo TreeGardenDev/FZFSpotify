@@ -424,15 +424,15 @@ def build_rec_query(seed_tuple):
                 trackstr += ","
             trackstr += seed_value
     if artiststr:
-        final_str += f"seed_artists={artiststr}"
+        final_str += f"artists={artiststr}"
     if genrestr:
         if final_str:
             final_str += "&"
-        final_str += f"seed_genres={genrestr}"
+        final_str += f"genres={genrestr}"
     if trackstr:
         if final_str:
             final_str += "&"
-        final_str += f"seed_tracks={trackstr}"
+        final_str += f"tracks={trackstr}"
     encoded_query = urllib.parse.quote(final_str)
     return encoded_query
 
