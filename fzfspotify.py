@@ -180,7 +180,7 @@ def search_spotify(query, token, search_type):
     elif search_type == "albums":
         query_type = "album"
 
-    params = {"q": query, "type": query_type, "limit": 20}
+    params = {"q": query, "type": query_type, "limit": 10}
     resp = requests.get(f"{SPOTIFY_API_BASE}/search", headers=headers, params=params)
     resp.raise_for_status()
     tracks = resp.json()[search_type]["items"]
@@ -364,7 +364,7 @@ def get_spotify_auth():
 
 def search_tracks(query, token):
     headers = {"Authorization": f"Bearer {token}"}
-    params = {"q": query, "type": "track", "limit": 20}
+    params = {"q": query, "type": "track", "limit": 10}
     resp = requests.get(f"{SPOTIFY_API_BASE}/search", headers=headers, params=params)
     resp.raise_for_status()
     tracks = resp.json()["tracks"]["items"]
