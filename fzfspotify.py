@@ -627,11 +627,16 @@ def main():
         _= view_queue(token)
 
     elif command == "single_song_playlist":
-        playlists = get_my_playlists(token)
-        options = [(playlist["name"], playlist["id"]) for playlist in playlists["items"]]
-        id=fzf_select_playlist(options)
-        play_song(token,id)
+        artist_name = input("Enter artist name: ")
+        track_name = input("Enter track name: ")
+        query = f"track:{track_name} artist:{artist_name}"
+        track = search_spotify(query, token,"tracks")
+        if track:
+            _=play_uri(track[0], build_dbus_string(ensure_spotifyd_dbus()))
+        else:
+            print("No track found for query:", query)
 
+        
     elif command == "play_artist":
         artist_name = input("Enter artist name: ")
        # playlists = get_artist_search(token, str(artist_name))
