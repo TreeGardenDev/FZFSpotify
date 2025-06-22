@@ -180,8 +180,8 @@ def search_spotify(query, token, search_type):
     elif search_type == "albums":
         query_type = "album"
 
-    params = {"q": query, "type": query_type, "limit": 20}
-    resp = requests.get(f"{SPOTIFY_API_BASE}/search", headers=headers, params=params)
+    params = {"q": query, "type": query_type, "limit": 10}
+    resp = requests.get(f"{SPOTIFY_API_BASE}/search?q="+query+"&type="+query_type+"&limit=10", headers=headers, params=params)
     resp.raise_for_status()
     tracks = resp.json()[search_type]["items"]
     if tracks:
@@ -364,8 +364,9 @@ def get_spotify_auth():
 
 def search_tracks(query, token):
     headers = {"Authorization": f"Bearer {token}"}
-    params = {"q": query, "type": "track", "limit": 20}
-    resp = requests.get(f"{SPOTIFY_API_BASE}/search", headers=headers, params=params)
+    params = {"q": query, "type": "track", "limit": 10}
+    #resp = requests.get(f"{SPOTIFY_API_BASE}/search", headers=headers, params=params)
+    resp = requests.get(f"{SPOTIFY_API_BASE}/search?q="+query+"&type=track"+"&limit=10", headers=headers, params=params)
     resp.raise_for_status()
     tracks = resp.json()["tracks"]["items"]
     return [(t["name"], t["artists"][0]["name"], t["uri"]) for t in tracks]
@@ -507,10 +508,11 @@ def query_recommendations(token, query):
     load_dotenv(override=True)  # Reload the environment variables
     authtoken = os.getenv("SPOTIFY_OAUTH_TOKEN")
     headers = {"Authorization": f"Bearer {authtoken}"}
+    params = {"q": query, "type": "track", "limit": 10}
 
-    url= f"{SPOTIFY_API_BASE}/search?q={query}&type=track"
+    url= f"{SPOTIFY_API_BASE}/search?q="+query+"&type=track"+"&limit=10"
     #url="https://api.spotify.com/v1/recommendations?seed_artists=4NHQUGzhtTLFvgF5SZesLK&seed_genres=classical%2Ccountry&seed_tracks=0c6xIDDpzE81m2q797ordA"
-    resp = requests.get(url, headers=headers)
+    resp = requests.get(url, headers=headers,params=params)
     #resp.raise_for_status()
     if resp.status_code == 401:
         print(resp.text)
@@ -613,8 +615,9 @@ def main():
             id=ensure_spotifyd_dbus()
             dest=build_dbus_string(id)
             
-            print("Adding recommendations to playback queue...")
             for track in recommendations["tracks"]["items"]:
+                    
+                
                 name = track["name"]
                 artist = track["artists"][0]["name"]
                 query = f"track:{name} artist:{artist}"
