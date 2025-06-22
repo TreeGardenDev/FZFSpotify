@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-from typing_extensions import override
 import psutil
 import sys
 import time
@@ -29,6 +28,7 @@ def open_initial_menu():
         "Shuffle",
         "Skip",
         "Previous",
+        "View Queue",
     "Full Playlist",
     "Similar Tracks",
         "Get Recommendations",
@@ -56,6 +56,8 @@ def open_initial_menu():
         return "previous"
     if selected=="Full Playlist":
         return "play_playlist"
+    if selected=="View Queue":
+        return "view_queue"
     if selected=="Similar Tracks":
         return "similar_tracks"
     if selected=="Get Recommendations":
@@ -94,7 +96,7 @@ def auth_code_me_path():
     client_id=get_env_var("SPOTIFY_CLIENT_ID")
     redirect_uri = "http://127.0.0.1:3000"
     state="ThisShitStupid"
-    scope= "user-read-private user-read-email user-modify-playback-state"
+    scope= "user-read-private user-read-email user-modify-playback-state user-read-currently-playing user-read-playback-state"
 
     url=f"https://accounts.spotify.com/authorize?response_type=code&client_id={client_id}&scope={scope}&redirect_uri={redirect_uri}&state={state}"
     response = requests.post(url)
@@ -158,7 +160,7 @@ def add_to_queue(options, token):
         #create spotify query
         #Example: track:Doxy%20artist:Miles%20Davis
         query = f"track:{name} artist:{artist}"
-        track = search_spotify(query, token)
+        track = search_spotify(query, token,"tracks" )
         if track:
             track_uris.append(track[0])
     print(f"Adding {len(track_uris)} tracks to playback queue.")
@@ -166,12 +168,22 @@ def add_to_queue(options, token):
         add_to_playback_queue(uri, token)
 
 
-def search_spotify(query, token):
+def search_spotify(query, token, search_type):
     headers = {"Authorization": f"Bearer {token}"}
-    params = {"q": query, "type": "track", "limit": 20}
+    if search_type not in ["tracks", "artists", "albums"]:
+        sys.exit(f"Invalid search type: {search_type}. Must be one of 'tracks', 'artists', or 'albums'.")
+    query_type=""
+    if search_type == "tracks":
+        query_type = "track"
+    elif search_type == "artists":
+        query_type = "artist"
+    elif search_type == "albums":
+        query_type = "album"
+
+    params = {"q": query, "type": query_type, "limit": 20}
     resp = requests.get(f"{SPOTIFY_API_BASE}/search", headers=headers, params=params)
     resp.raise_for_status()
-    tracks = resp.json()["tracks"]["items"]
+    tracks = resp.json()[search_type]["items"]
     if tracks:
         return [(t["uri"]) for t in tracks]
     else:
@@ -200,7 +212,63 @@ def add_to_playback_queue(uri, token):
     else:
         print(f"Failed to add track {uri} to playback queue. Status code: {resp.status_code}")
         print(resp.text)
-       
+def view_queue(token):
+    load_dotenv(override=True)  # Reload the environment variables
+    authtoken = os.getenv("SPOTIFY_OAUTH_TOKEN")
+
+    #Add a track to the spotify playback queue
+    headers = {"Authorization": f"Bearer {authtoken}"}
+    resp = requests.get(f"{SPOTIFY_API_BASE}/me/player/queue", headers=headers)
+    if resp.status_code == 200:
+        queue = resp.json()
+        if not queue["queue"]:
+            print("Playback queue is empty.")
+            sys.exit(0)
+        print("Current playback queue:")
+
+        queue_dict = {}
+        
+        for item in queue["queue"]:
+            name = item["name"]
+            artist = item["artists"][0]["name"]
+            uri = item["uri"]
+            
+
+            queue_dict[f"{name} - {artist}"] = uri
+            #Get the selected track URI
+            
+        result = subprocess.run(["fzf", "--layout=reverse-list", "--border=rounded", "--border-label='Fuzzy Spotify'"], input="\n".join(queue_dict.keys()), text=True, capture_output=True)
+        if result.returncode == 130:
+            print("Exiting...")
+            sys.exit(0)
+        if result.returncode != 0:
+            return None
+        sel = result.stdout.strip()
+        print(f"Selected track: {sel}")
+        sel_uri = queue_dict.get(sel)
+
+
+        if sel_uri:
+            id=ensure_spotifyd_dbus()
+            dest=build_dbus_string(id)
+            play_uri(sel_uri, dest)
+
+    elif resp.status_code == 401:
+        print(resp.text)
+        print("Token expired, refreshing token...")
+        _=get_refresh_token()
+        print("Token refreshed successfully.")
+
+        view_queue(token)
+    elif resp.status_code==404:
+        print(f"Playback device not found. Please ensure a Spotify client is active and try again.")
+        sys.exit(1)
+      
+    else:
+        print(f"Failed to retrieve playback queue. Status code: {resp.status_code}")
+        print(resp.text)
+        sys.exit(1)
+
 
 def ensure_spotifyd_running():
     #check if spotifyd is running, start it if not
@@ -278,7 +346,6 @@ def play_uri(uri,dest):
         dest= build_dbus_string(newid)
         _=play_uri(uri, dest)
         #try again
-
 
 
     return 0
@@ -509,7 +576,7 @@ def main():
         options = [(track["name"], track["artist"]["name"], track["url"]) for track in similar_tracks]
         print("Building playback queue...")
         query = f"track:{track_name} artist:{artist_name}"
-        track = search_spotify(query, token)
+        track = search_spotify(query, token,"tracks")
         if track:
             _=play_uri(track[0], build_dbus_string(ensure_spotifyd_dbus()))
         else:
@@ -551,11 +618,13 @@ def main():
                 name = track["name"]
                 artist = track["artists"][0]["name"]
                 query = f"track:{name} artist:{artist}"
-                track = search_spotify(query, token)
+                track = search_spotify(query, token,"tracks")
                 if track:
                     add_to_playback_queue(track[0], token)
             print("Recommendations added to playback queue.")
             
+    elif command == "view_queue":
+        _= view_queue(token)
 
     elif command == "single_song_playlist":
         playlists = get_my_playlists(token)
@@ -565,17 +634,22 @@ def main():
 
     elif command == "play_artist":
         artist_name = input("Enter artist name: ")
-        playlists = get_artist_search(token, str(artist_name))
+       # playlists = get_artist_search(token, str(artist_name))
+        query = f"artist:{artist_name}"
+
+        tracks = search_spotify(query, token,"artists")
+        if tracks:
+            _=play_uri(tracks[0], build_dbus_string(ensure_spotifyd_dbus()))
         
 
-        options = [(playlist["name"], playlist["uri"]) for playlist in playlists["artists"]["items"]]
+        #options = [(playlist["name"], playlist["uri"]) for playlist in playlists["artists"]["items"]]
 
-        uri=fzf_select_artist(options)
-        #pid=ensure_spotifyd_running()
-        #print(str(pid))
-        pid=ensure_spotifyd_dbus()
-        dest=build_dbus_string(pid)
-        play_uri(uri, dest)
+        #uri=fzf_select_artist(options)
+        ##pid=ensure_spotifyd_running()
+        ##print(str(pid))
+        #pid=ensure_spotifyd_dbus()
+        #dest=build_dbus_string(pid)
+        #play_uri(uri, dest)
 
 
         #id=fzf_select_playlist(options)
@@ -590,6 +664,7 @@ def main():
         id=ensure_spotifyd_dbus()
         dest=build_dbus_string(id)
         play_uri(uri, dest)
+
 
     elif command == "play":
         _= play_pause("Play")
@@ -620,3 +695,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    #_=auth_code_me_path()
+    #print(get_me_path_authcode())
