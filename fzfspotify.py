@@ -478,31 +478,26 @@ def build_rec_query(seed_tuple):
     genrestr=""
     trackstr=""
     final_str=""
+    sub_queries=[]
     for seed_type, seed_value in seed_tuple:
+        #Need to replace a repeating value here instead of append. maybe run multiple queies in future?
         if seed_type=="artist":
-            if artiststr:
-                artiststr += ","
-            artiststr += seed_value
+            #if artiststr:
+            #    artiststr += ","
+            encoded_query = urllib.parse.quote(f"artist:{seed_value}")
+            sub_queries.append(encoded_query)
         if seed_type=="genre":
-            if genrestr:
-                genrestr += ","
-            genrestr += seed_value
+            #if genrestr:
+            #    genrestr += ","
+            encoded_query = urllib.parse.quote(f"genre:{seed_value}")
+            sub_queries.append(encoded_query)
         if seed_type=="track":
-            if trackstr:
-                trackstr += ","
-            trackstr += seed_value
-    if artiststr:
-        final_str += f"artists={artiststr}"
-    if genrestr:
-        if final_str:
-            final_str += "&"
-        final_str += f"genres={genrestr}"
-    if trackstr:
-        if final_str:
-            final_str += "&"
-        final_str += f"tracks={trackstr}"
-    encoded_query = urllib.parse.quote(final_str)
-    return encoded_query
+            #if trackstr:
+            #    trackstr += ","
+            encoded_query = urllib.parse.quote(f"track:{seed_value}")
+            sub_queries.append(encoded_query)
+
+    return sub_queries
 
 def query_recommendations(token, query):
     load_dotenv(override=True)  # Reload the environment variables
@@ -606,25 +601,29 @@ def main():
             sys.exit(0)
 
 
-        query=build_rec_query(options_tuple)
+        queries=build_rec_query(options_tuple)
+        recommendations=""
+        for i in range(len(queries)):
+            query = queries[i]
+            print("Querying recommendations for: ", queries[i])
 
-        recommendations = query_recommendations(token, query)
+            recommendations = query_recommendations(token, query)
 
-        if recommendations["tracks"]:
-                
-            id=ensure_spotifyd_dbus()
-            dest=build_dbus_string(id)
-            
-            for track in recommendations["tracks"]["items"]:
+            if recommendations["tracks"]:
                     
+                id=ensure_spotifyd_dbus()
+                dest=build_dbus_string(id)
                 
-                name = track["name"]
-                artist = track["artists"][0]["name"]
-                query = f"track:{name} artist:{artist}"
-                track = search_spotify(query, token,"tracks")
-                if track:
-                    add_to_playback_queue(track[0], token)
-            print("Recommendations added to playback queue.")
+                for track in recommendations["tracks"]["items"]:
+                        
+                    
+                    name = track["name"]
+                    artist = track["artists"][0]["name"]
+                    query = f"track:{name} artist:{artist}"
+                    track = search_spotify(query, token,"tracks")
+                    if track:
+                        add_to_playback_queue(track[0], token)
+        print("Recommendations added to playback queue.")
             
     elif command == "view_queue":
         _= view_queue(token)
